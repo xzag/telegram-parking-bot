@@ -37,7 +37,7 @@ jobs:
           tar -czf parking-bot-linux-amd64.tar.gz parking-bot README.MD scripts/deploy.sh
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: parking-bot-linux-amd64
           path: parking-bot-linux-amd64.tar.gz
