@@ -133,6 +133,9 @@ func handleCallback(ctx context.Context, bot *tgbotapi.BotAPI, store *storage.St
 
 		renderParking(ctx, bot, store, cb.Message.Chat.ID, cb.Message.MessageID, user.ID)
 
+	case data == "noop":
+		return
+
 	case data == "refresh":
 		renderParking(ctx, bot, store, cb.Message.Chat.ID, cb.Message.MessageID, cb.From.ID)
 
@@ -188,55 +191,67 @@ func buildParkingView(ctx context.Context, store *storage.Storage, telegramID in
 		text += "\n\n<b>Занято:</b>\n" + strings.Join(busyLines, "\n")
 	}
 
+	const buttonsPerRow = 4
+
 	var rows [][]tgbotapi.InlineKeyboardButton
+	var currentRow []tgbotapi.InlineKeyboardButton
+
+	flushRow := func() {
+		if len(currentRow) == 0 {
+			return
+		}
+
+		for len(currentRow) < buttonsPerRow {
+			currentRow = append(currentRow, tgbotapi.NewInlineKeyboardButtonData(" ", "noop"))
+		}
+
+		rows = append(rows, currentRow)
+		currentRow = nil
+	}
 
 	for _, s := range state {
-		if s.UserID.Valid {
-			if s.UserID.Int64 == telegramID {
-				rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-					tgbotapi.NewInlineKeyboardButtonData(
-						fmt.Sprintf("🟡 %s — твое место, отменить", s.SpotNumber),
-						"cancel:"+s.SpotNumber,
-					),
-				))
-				continue
-			}
+		var btn tgbotapi.InlineKeyboardButton
 
-			label := fmt.Sprintf("🔴 %s — %s", s.SpotNumber, buttonUserLabel(s))
+		switch {
+		case s.UserID.Valid && s.UserID.Int64 == telegramID:
+			btn = tgbotapi.NewInlineKeyboardButtonData(
+				fmt.Sprintf("🟡 %s ✕", s.SpotNumber),
+				"cancel:"+s.SpotNumber,
+			)
 
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(label, "busy:"+s.SpotNumber),
-			))
-			continue
-		}
+		case s.UserID.Valid:
+			btn = tgbotapi.NewInlineKeyboardButtonData(
+				fmt.Sprintf("🔴 %s", s.SpotNumber),
+				"busy:"+s.SpotNumber,
+			)
 
-		if !bookingOpen {
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(
-					fmt.Sprintf("⚪ %s — с 06:00", s.SpotNumber),
-					"noop:"+s.SpotNumber,
-				),
-			))
-			continue
-		}
+		case !bookingOpen:
+			btn = tgbotapi.NewInlineKeyboardButtonData(
+				fmt.Sprintf("⚪ %s", s.SpotNumber),
+				"noop:"+s.SpotNumber,
+			)
 
-		if hasUserBooking {
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(
-					fmt.Sprintf("⚪ %s — свободно", s.SpotNumber),
-					"noop:"+s.SpotNumber,
-				),
-			))
-			continue
-		}
+		case hasUserBooking:
+			btn = tgbotapi.NewInlineKeyboardButtonData(
+				fmt.Sprintf("⚪ %s", s.SpotNumber),
+				"noop:"+s.SpotNumber,
+			)
 
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(
-				fmt.Sprintf("🟢 %s — свободно", s.SpotNumber),
+		default:
+			btn = tgbotapi.NewInlineKeyboardButtonData(
+				fmt.Sprintf("🟢 %s", s.SpotNumber),
 				"book:"+s.SpotNumber,
-			),
-		))
+			)
+		}
+
+		currentRow = append(currentRow, btn)
+
+		if len(currentRow) == buttonsPerRow {
+			flushRow()
+		}
 	}
+
+	flushRow()
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("🔄 Обновить", "refresh"),
@@ -293,16 +308,6 @@ func userName(user *tgbotapi.User) string {
 	}
 
 	return fmt.Sprintf("%d", user.ID)
-}
-
-func buttonUserLabel(s storage.SpotState) string {
-	name := s.UserName.String
-
-	if s.Username.Valid && s.Username.String != "" {
-		return fmt.Sprintf("%s (@%s)", name, s.Username.String)
-	}
-
-	return name
 }
 
 func htmlUserMention(userID int64, name string, username sql.NullString) string {

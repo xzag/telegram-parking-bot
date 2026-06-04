@@ -46,3 +46,7 @@ logs:
 .PHONY: status
 status:
 	systemctl status parking-bot
+
+.PHONY: package
+package: build
+	tar -czf parking-bot-linux-amd64.tar.gz parking-bot README.md
