@@ -1,0 +1,18 @@
+# sqlite
+*.db
+*.db-shm
+*.db-wal
+
+# env
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+
+# vendor
+vendor/
+
+# binaries
+parking-bot
