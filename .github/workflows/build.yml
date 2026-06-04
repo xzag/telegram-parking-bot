@@ -34,7 +34,7 @@ jobs:
 
       - name: Package
         run: |
-          tar -czf parking-bot-linux-amd64.tar.gz parking-bot README.md scripts/deploy.sh
+          tar -czf parking-bot-linux-amd64.tar.gz parking-bot README.MD scripts/deploy.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
