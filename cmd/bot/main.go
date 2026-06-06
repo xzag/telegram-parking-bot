@@ -35,10 +35,12 @@ func main() {
 
 	ctx := context.Background()
 
-	// Пока просто сидим места кодом. Потом можно сделать админ-команду.
-	if err := store.SeedSpots(ctx, []string{
-		"27", "29", "34", "55", "56", "66", "67", "68", "70", "77", "157",
-	}); err != nil {
+	spots := parseSpots(os.Getenv("PARKING_SPOTS"))
+	if len(spots) == 0 {
+		log.Fatal("PARKING_SPOTS is required")
+	}
+
+	if err := store.SyncSpots(ctx, spots); err != nil {
 		log.Fatal(err)
 	}
 
@@ -160,19 +162,22 @@ func buildParkingView(ctx context.Context, store *storage.Storage, telegramID in
 
 	bookingOpen := store.IsBookingOpenNow()
 
-	var text string
+	text := fmt.Sprintf(
+		"🚗 <b>Парковка на %s</b>\n\n",
+		store.Now().Format("02.01"),
+	)
 	switch {
 	case !bookingOpen:
-		text = "🚗 <b>Парковка на сегодня</b>\n\nБронирование открывается в 06:00 по Новосибирску."
+		text += "Бронирование открывается в 06:00 по Новосибирску."
 
 	case hasUserBooking:
-		text = fmt.Sprintf(
-			"🚗 <b>Парковка на сегодня</b>\n\nТвое место: <b>%s</b>\nЧтобы выбрать другое место, сначала отмени текущую бронь.",
+		text += fmt.Sprintf(
+			"Твое место: <b>%s</b>\nЧтобы выбрать другое место, сначала отмени текущую бронь.",
 			htmlEscape(userSpot),
 		)
 
 	default:
-		text = "🚗 <b>Парковка на сегодня</b>\n\nВыбери свободное место:"
+		text += "Выбери свободное место:"
 	}
 
 	busyLines := make([]string, 0)
@@ -341,4 +346,27 @@ func isTelegramMessageNotModified(err error) bool {
 		err.Error(),
 		"message is not modified",
 	)
+}
+
+func parseSpots(raw string) []string {
+	parts := strings.Split(raw, ",")
+
+	result := make([]string, 0, len(parts))
+	seen := make(map[string]struct{})
+
+	for _, part := range parts {
+		spot := strings.TrimSpace(part)
+		if spot == "" {
+			continue
+		}
+
+		if _, ok := seen[spot]; ok {
+			continue
+		}
+
+		seen[spot] = struct{}{}
+		result = append(result, spot)
+	}
+
+	return result
 }

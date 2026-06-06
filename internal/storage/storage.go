@@ -90,7 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(booking_date);
 	return err
 }
 
-func (s *Storage) SeedSpots(ctx context.Context, spots []string) error {
+func (s *Storage) SyncSpots(ctx context.Context, spots []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -99,12 +99,18 @@ func (s *Storage) SeedSpots(ctx context.Context, spots []string) error {
 		_ = tx.Rollback()
 	}()
 
+	_, err = tx.ExecContext(ctx, `UPDATE spots SET active = 0`)
+	if err != nil {
+		return err
+	}
+
 	for _, spot := range spots {
-		if _, err := tx.ExecContext(ctx, `
+		_, err := tx.ExecContext(ctx, `
 INSERT INTO spots(number, active)
 VALUES (?, 1)
 ON CONFLICT(number) DO UPDATE SET active = 1
-`, spot); err != nil {
+`, spot)
+		if err != nil {
 			return err
 		}
 	}
@@ -273,8 +279,12 @@ WHERE booking_date = ? AND telegram_id = ?
 	return spot, true, nil
 }
 
+func (s *Storage) Now() time.Time {
+	return time.Now().In(s.loc)
+}
+
 func (s *Storage) today() string {
-	return time.Now().In(s.loc).Format("2006-01-02")
+	return s.Now().Format("2006-01-02")
 }
 
 func (s *Storage) IsBookingOpenNow() bool {
@@ -282,7 +292,7 @@ func (s *Storage) IsBookingOpenNow() bool {
 }
 
 func (s *Storage) isBookingOpenNow() bool {
-	now := time.Now().In(s.loc)
+	now := s.Now()
 	openAt := time.Date(
 		now.Year(),
 		now.Month(),
